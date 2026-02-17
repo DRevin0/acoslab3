@@ -1,0 +1,5 @@
+Hello world
+This is a simple test file
+With only a few lines
+To check the green output color
+Testing 1 2 3

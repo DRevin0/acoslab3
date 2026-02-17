@@ -12,21 +12,22 @@ struct Task {
     std::string filepath;
 };
 
+template<typename ResultType>
 class ThreadPool {
 private:
     BlockingQueue<Task> taskQueue;
-    BlockingQueue<int> resultQueue;
+    BlockingQueue<ResultType> resultQueue;
     std::vector<std::thread> workers;
     std::atomic<bool> stopFlag{false};
     std::atomic<int> activeWorkers{0};
     std::atomic<int> tasksCompleted{0};
     std::atomic<int> tasksSubmitted{0};
-    std::function<int(const std::string&)> processFunc;
+    std::function<ResultType(const std::string&)> processFunc;
     
 public:
-    ThreadPool(size_t numThreads, 
-               std::function<int(const std::string&)> func) 
-        : processFunc(func) {
+    template<typename Func>
+    ThreadPool(size_t numThreads, Func&& func) 
+        : processFunc(std::forward<Func>(func)) {
         for (size_t i = 0; i < numThreads; ++i) {
             workers.emplace_back([this]() {
                 activeWorkers++;
@@ -35,7 +36,7 @@ public:
                     if (!taskOpt) break;
                     
                     Task task = std::move(*taskOpt);
-                    int result = processFunc(task.filepath);
+                    ResultType result = processFunc(task.filepath);
                     resultQueue.push(result);
                     tasksCompleted++;
                 }
@@ -51,19 +52,8 @@ public:
         }
     }
     
-    std::optional<int> getResult() {
+    std::optional<ResultType> getResult() {
         return resultQueue.pop();
-    }
-
-    std::vector<int> waitAllResults() {
-        std::vector<int> results;
-        while (tasksCompleted < tasksSubmitted) {
-            auto resultOpt = resultQueue.pop();
-            if (resultOpt) {
-                results.push_back(*resultOpt);
-            }
-        }
-        return results;
     }
     
     void stop() {
@@ -77,9 +67,11 @@ public:
             if (worker.joinable()) worker.join();
         }
     }
+    
     size_t pendingTasks() const { 
         return tasksSubmitted - tasksCompleted; 
     }
+    
     size_t completedTasks() const { 
         return tasksCompleted; 
     }
